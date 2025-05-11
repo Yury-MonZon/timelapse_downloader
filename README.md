@@ -72,19 +72,23 @@ python get_timelapse.py [options]
   Download all available timelapse videos.
 
 - `--out <folder>`  
-  Output directory to save downloaded videos (default: ./timelapse).
+  Output directory to save downloaded videos. Default: `./timelapse`
 
 - `--do-not-delete`  
-  Do not delete remote file(s) after download (ignored in --watch mode).
+  Do not delete remote file(s) after download (ignored in `--watch` mode).
 
 - `--watch`  
   Continuously check for new timelapse files every 60 seconds and download them.
 
 - `--no-make-streamable`  
-  Do **not** convert videos to streamable 1080p using ffmpeg (by default, conversion is ON).
+  Do **not** convert videos to streamable 1080p using ffmpeg Default: conversion is ON.
 
 - `--no-gpu`  
   Force CPU-only processing for video conversion (useful if you do not have an NVIDIA GPU; uses libx265 instead of hevc_nvenc).
+  
+- `--speed`
+  Adjust video speed (Use `0.5` for half speed, `2.0` for double speed). Default: `0.33`.
+
 
 ### Example Commands
 
@@ -111,6 +115,11 @@ python get_timelapse.py --no-make-streamable
 Download and convert using CPU only (no NVIDIA GPU required):
 ```bash
 python get_timelapse.py --no-gpu
+```
+
+Download and convert the last timelapse, using CPU only, converted video only having 3/10th of the original speed:
+```bash
+python ../get_timelapse.py --last --no-gpu --speed 0.3
 ```
 
 ---

@@ -87,7 +87,7 @@ python get_timelapse.py [options]
   Force CPU-only processing for video conversion (useful if you do not have an NVIDIA GPU; uses libx265 instead of hevc_nvenc).
   
 - `--speed`
-  Adjust video speed (Use `0.5` for half speed, `2.0` for double speed). Default: `0.33`.
+  Adjust video speed (Use `0.5` for half speed, `2.0` for double speed). Default: `0.5`.
 
 
 ### Example Commands
@@ -137,7 +137,12 @@ ffmpeg -y -hwaccel cuda -i input.mp4 -vf scale=1920:1080 -c:v hevc_nvenc -preset
 ffmpeg -y -i input.mp4 -vf scale=1920:1080 -c:v libx265 -preset slow -b:v 15M -tag:v hvc1 -video_track_timescale 90000 output_streamable.mp4
 ```
 
-The original file is deleted after successful conversion.
+**CPU-only example with reduced speed:**
+```bash
+ffmpeg -y -i input.mp4 -vf setpts=2.0*PTS,fps=30,scale=1920:1080 -c:v libx265 -preset slow -b:v 5M -tag:v hvc1 -video_track_timescale 90000 output_streamable.mp4
+```
+
+The original remote file is deleted after successful conversion.
 
 ---
 

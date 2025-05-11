@@ -156,7 +156,7 @@ def main():
     parser.add_argument('--no-make-streamable', action='store_true', help='Do NOT use ffmpeg+NVIDIA to upscale to 1080p and make streamable (default is ON)')
     parser.add_argument('--keep-after-upload', action='store_true', help='Keep streamable file after Telegram upload (default: delete after upload)')
     parser.add_argument('--no-gpu', action='store_true', help='Force CPU-only processing (no NVIDIA GPU required)')
-    parser.add_argument('--speed', type=float, default=0.3, help='Adjust video speed (e.g., 0.5 for half speed, 2.0 for double speed). Default is 0.3 (slower speed).')
+    parser.add_argument('--speed', type=float, default=0.5, help='Adjust video speed (e.g., 0.5 for half speed, 2.0 for double speed). Default is 0.5 (slower speed). Do not make it hard on yourself, only use 2 decimals at best :)')
     parser.add_argument('--test', action='store_true', help='Run test mode: process and upload test_video.avi')
     args = parser.parse_args()
 
@@ -189,13 +189,13 @@ def main():
             test_video
         ], text=True).strip().split('/')[0])
         
-        # Adjust frame selection to maintain video quality while reducing frame count
-        target_fps = max(1, original_fps * args.speed)
+        # Adjust speed selection to slow down video while maintaining video quality
+        target_speed = 1 / args.speed
         
         if args.no_gpu:
             ffmpeg_cmd = [
                 'ffmpeg', '-y', '-i', test_video,
-                '-vf', f'fps={target_fps},scale=1920:1080',
+                '-vf', f'setpts={target_speed}*PTS,scale=1920:1080',
                 '-c:v', 'libx265', '-preset', 'slow', '-b:v', '5M',
                 '-tag:v', 'hvc1', '-video_track_timescale', '90000',
                 streamable_filename
@@ -203,7 +203,7 @@ def main():
         else:
             ffmpeg_cmd = [
                 'ffmpeg', '-y', '-hwaccel', 'cuda', '-i', test_video,
-                '-vf', f'fps={target_fps},scale=1920:1080',
+                '-vf', f'setpts={target_speed}*PTS,scale=1920:1080',
                 '-c:v', 'hevc_nvenc', '-preset', 'p7', '-tune', 'hq', '-b:v', '5M',
                 '-tag:v', 'hvc1', '-video_track_timescale', '90000',
                 streamable_filename
@@ -211,10 +211,10 @@ def main():
         
         try:
             subprocess.run(ffmpeg_cmd, check=True)
-            print(f'Created streamable video at {streamable_filename} (speed: {args.speed}x)')
+            print(f'Created streamable video at {streamable_filename} (Speed: {round(args.speed,2)}x)')
             
             # Attempt Telegram upload
-            caption = f'Test Video: {os.path.basename(test_video)} (Speed: {args.speed}x)'
+            caption = f'Test Video: {os.path.basename(test_video)} (Speed: {round(args.speed,2)}x)')
             tg_success = asyncio.run(try_telegram_upload(config, streamable_filename, caption=caption))
             
             # Clean up
@@ -347,13 +347,13 @@ def main():
                             local_filename
                         ], text=True).strip().split('/')[0])
                         
-                        # Adjust frame selection to maintain video quality while reducing frame count
-                        target_fps = max(1, original_fps * args.speed)
+                        # Adjust speed selection to slow down video while maintaining video quality
+                        target_speed = 1 / args.speed
                         
                         if args.no_gpu:
                             ffmpeg_cmd = [
                                 'ffmpeg', '-y', '-i', local_filename,
-                                '-vf', f'fps={target_fps},scale=1920:1080',
+                                '-vf', f'setpts={target_speed}*PTS,scale=1920:1080',
                                 '-c:v', 'libx265', '-preset', 'slow', '-b:v', '5M',
                                 '-tag:v', 'hvc1', '-video_track_timescale', '90000',
                                 streamable_filename
@@ -361,7 +361,7 @@ def main():
                         else:
                             ffmpeg_cmd = [
                                 'ffmpeg', '-y', '-hwaccel', 'cuda', '-i', local_filename,
-                                '-vf', f'fps={target_fps},scale=1920:1080',
+                                '-vf', f'setpts={target_speed}*PTS,scale=1920:1080',
                                 '-c:v', 'hevc_nvenc', '-preset', 'p7', '-tune', 'hq', '-b:v', '5M',
                                 '-tag:v', 'hvc1', '-video_track_timescale', '90000',
                                 streamable_filename

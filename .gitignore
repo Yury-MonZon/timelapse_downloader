@@ -1,1 +1,36 @@
+## Ignore defaults
+# Windows files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Mac files
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Common IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*.swn
+
+# Common development files
+node_modules/
+npm-debug.log
+package-lock.json
+
+# Common OS files
+*.tmp
+*.log
+*.lock
+
+## Files
+.gitignore
 config.json
+
+## directories
+.git/
+timelapse/

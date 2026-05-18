@@ -14,6 +14,61 @@ import asyncio
 import re
 import shutil
 import sys
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
+
+
+# --- Optional HTTP status endpoint (enable with --status-port) ---
+# Lets external monitoring (Uptime Kuma, Prometheus blackbox, etc.) probe
+# whether the watcher is healthy. Disabled unless --status-port is passed.
+
+_STATE_LOCK = threading.Lock()
+_STATE = {
+    "state": "starting",   # starting | idle | working | error
+    "last_check": None,    # ISO timestamp of last completed cycle
+    "last_success": None,  # ISO timestamp of last cycle without errors
+    "last_error": None,    # last error message
+    "current_file": None,  # name of file currently being processed
+}
+
+
+def _set_state(**kwargs):
+    with _STATE_LOCK:
+        _STATE.update(kwargs)
+
+
+def _now_iso():
+    return datetime.now().isoformat(timespec="seconds")
+
+
+class _StatusHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path.rstrip("/") not in ("", "/status", "/health"):
+            self.send_response(404)
+            self.end_headers()
+            return
+        with _STATE_LOCK:
+            snapshot = dict(_STATE)
+        body = json.dumps(snapshot).encode()
+        # 503 when the last cycle errored, so a plain HTTP status-code
+        # monitor is sufficient (no JSON parsing required).
+        code = 503 if snapshot["state"] == "error" else 200
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, format, *args):
+        # Suppress access logs — the monitoring poll would spam stdout.
+        pass
+
+
+def _start_status_server(port):
+    server = HTTPServer(("0.0.0.0", port), _StatusHandler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    print(f"Status server listening on :{port}")
+
 
 def check_ffmpeg_dependencies():
     """Check if ffmpeg and ffprobe are available in the system PATH."""
@@ -158,7 +213,11 @@ def main():
     parser.add_argument('--no-gpu', action='store_true', help='Force CPU-only processing (no NVIDIA GPU required)')
     parser.add_argument('--speed', type=float, default=0.3, help='Adjust video speed (e.g., 0.5 for half speed, 2.0 for double speed). Default is 0.3 (slower speed).')
     parser.add_argument('--test', action='store_true', help='Run test mode: process and upload test_video.avi')
+    parser.add_argument('--status-port', type=int, default=None, help='Expose an HTTP status endpoint on this port (returns JSON; 200 normally, 503 on error). Useful with --watch for external monitoring (Uptime Kuma, etc.).')
     args = parser.parse_args()
+
+    if args.status_port:
+        _start_status_server(args.status_port)
 
     # Test mode implementation
     if args.test:
@@ -231,6 +290,7 @@ def main():
     os.makedirs(out_dir, exist_ok=True)
 
     async def download_and_process():
+        _set_state(state="working", last_error=None)
         ftp = None
         try:
             ftp = ImplicitFTP_TLS()
@@ -241,10 +301,14 @@ def main():
                 ftp.login('bblp', ACCESS_CODE)
                 ftp.prot_p()
             except OSError as e:
-                print(f"Network error during FTP connection: {e}")
+                msg = f"Network error during FTP connection: {e}"
+                print(msg)
+                _set_state(state="error", last_error=msg, last_check=_now_iso())
                 return False
             except all_errors as ex:
-                print(f"FTP error during connection: {ex}")
+                msg = f"FTP error during connection: {ex}"
+                print(msg)
+                _set_state(state="error", last_error=msg, last_check=_now_iso())
                 return False
 
             tldirlist = []
@@ -257,7 +321,9 @@ def main():
                 ftp.retrlines('LIST', tltndirlist.append)
                 tltndirlist = [parse_ftp_listing(line) for line in tltndirlist if parse_ftp_listing(line)]
             except all_errors as ex:
-                print(f"FTP error during directory listing: {ex}")
+                msg = f"FTP error during directory listing: {ex}"
+                print(msg)
+                _set_state(state="error", last_error=msg, last_check=_now_iso())
                 return False
 
             tldirlist_dict = {get_base_name(item['name']): item for item in tldirlist}
@@ -266,6 +332,7 @@ def main():
 
             if not matching_files:
                 print('No matching files found.')
+                _set_state(state="idle", current_file=None, last_check=_now_iso(), last_success=_now_iso())
                 return False
 
             matching_files.sort(key=lambda x: parse_date(x) or datetime.min, reverse=True)
@@ -279,6 +346,7 @@ def main():
 
             for item in files_to_download:
                 print(f'Processing: {item["name"]}')
+                _set_state(current_file=item["name"])
                 should_delete_remote_file = True
                 local_filename = os.path.join(out_dir, item["name"])
                 file_size = item["size"]
@@ -440,8 +508,12 @@ def main():
             if total_pbar:
                 total_pbar.close()
 
+            _set_state(state="idle", current_file=None, last_check=_now_iso(), last_success=_now_iso())
+
         except Exception as ex:
-            print(f"General error in download_and_process: {ex}")
+            msg = f"General error in download_and_process: {ex}"
+            print(msg)
+            _set_state(state="error", current_file=None, last_error=msg, last_check=_now_iso())
             return False
         finally:
             if ftp is not None:

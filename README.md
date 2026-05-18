@@ -86,6 +86,15 @@ python get_timelapse.py [options]
 - `--no-gpu`  
   Force CPU-only processing for video conversion (useful if you do not have an NVIDIA GPU; uses libx265 instead of hevc_nvenc).
 
+- `--status-port <port>`  
+  Expose an HTTP status endpoint on the given port. Useful with `--watch`
+  for external monitoring (Uptime Kuma, Prometheus blackbox, etc.).
+  Returns JSON `{state, last_check, last_success, last_error, current_file}`
+  where `state` is `starting | idle | working | error`. HTTP status is
+  **200** normally and **503** when the last cycle errored, so a plain
+  status-code monitor is sufficient (no JSON parsing required). Off by
+  default.
+
 ### Example Commands
 
 Download the latest timelapse and make it streamable (default):

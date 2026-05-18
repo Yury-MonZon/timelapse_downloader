@@ -392,6 +392,15 @@ def main():
                         print(f'Running ffmpeg to create streamable: {streamable_filename}')
                         subprocess.run(ffmpeg_cmd, check=True)
                         print(f'Streamable file created: {streamable_filename}')
+                        # Match the README's "deletes original files after successful
+                        # conversion" promise — drop the source .avi as soon as the
+                        # encoded .mp4 exists, so users without Telegram configured
+                        # don't keep ~3x disk per timelapse.
+                        try:
+                            os.remove(local_filename)
+                            print(f'Original deleted after encode: {local_filename}')
+                        except OSError as e:
+                            print(f'Could not delete original {local_filename}: {e}')
                         max_telegram_size = 49 * 1024 * 1024  # 49 MB
                         file_size = os.path.getsize(streamable_filename)
                         if file_size > max_telegram_size:
